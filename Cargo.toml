@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Alexdesander"]
 license = "MIT OR Apache-2.0"
+description = "A multi producer single consumer bundle of channels with configurable priorities, weights and the ability to freeze specific channels."
+repository = "https://github.com/alexdesander/multichannel"
+readme = "README.md"
+keywords = ["sync", "channel", "multithreading", "concurrency"]
+categories = ["concurrency"]
 
 [dependencies]
 crossbeam-channel = "0.5.12"
