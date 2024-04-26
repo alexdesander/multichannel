@@ -50,7 +50,7 @@ use rand::{
 };
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ReceiveError {
     #[error("All senders have been dropped")]
     AllSendersDropped,
@@ -68,17 +68,13 @@ pub struct MultiReceiver<T> {
     rng: SmallRng,
     parker: Parker,
     pending_msgs: Arc<AtomicUsize>,
+    disconnected: Arc<AtomicBool>,
 }
 
 impl<T> MultiReceiver<T> {
     pub fn recv(&mut self) -> Result<T, ReceiveError> {
         loop {
             self.parker.park();
-            // Check if all senders have been dropped
-            match Arc::<AtomicUsize>::strong_count(&self.pending_msgs) {
-                0 => return Err(ReceiveError::AllSendersDropped),
-                _ => {}
-            }
 
             // Find the lowest priority with pending messages
             let mut prio = None;
@@ -93,6 +89,13 @@ impl<T> MultiReceiver<T> {
                 }
             }
             let Some(prio) = prio else {
+                match Arc::<AtomicUsize>::strong_count(&self.pending_msgs) {
+                    1 => return Err(ReceiveError::AllSendersDropped),
+                    _ => {}
+                }
+                if self.disconnected.load(Ordering::Relaxed) {
+                    return Err(ReceiveError::AllSendersDropped);
+                }
                 continue;
             };
 
@@ -168,6 +171,16 @@ pub struct MultiSender<T> {
     senders: Vec<Sender<T>>,
     unparker: Unparker,
     pending_msgs: Arc<AtomicUsize>,
+    disconnected: Arc<AtomicBool>,
+}
+
+impl<T> Drop for MultiSender<T> {
+    fn drop(&mut self) {
+        if Arc::<AtomicUsize>::strong_count(&self.pending_msgs) == 2 {
+            self.disconnected.store(true, Ordering::Relaxed);
+            self.unparker.unpark();
+        }
+    }
 }
 
 impl<T> MultiSender<T> {
@@ -244,17 +257,20 @@ impl MultiChannelBuilder {
         let parker = Parker::new();
         let unparker = parker.unparker().clone();
         let pending_msgs = Arc::new(AtomicUsize::new(0));
+        let disconnected = Arc::new(AtomicBool::new(false));
         (
             MultiSender {
                 senders,
                 unparker,
                 pending_msgs: pending_msgs.clone(),
+                disconnected: disconnected.clone(),
             },
             MultiReceiver {
                 receivers,
                 rng: SmallRng::from_entropy(),
                 parker,
                 pending_msgs,
+                disconnected,
             },
         )
     }
@@ -653,5 +669,15 @@ mod tests {
             same_prio_msgs,
             ["Low Priority, Weight = 1", "Low Priority, Weight = 2"]
         )
+    }
+
+    #[test]
+    fn test_all_senders_dropped() {
+        let (mtx, mut mrx) = MultiChannelBuilder::new()
+            .with_channels(vec![vec![(1, None, false)]])
+            .build::<String>();
+
+        drop(mtx);
+        assert_eq!(mrx.recv(), Err(ReceiveError::AllSendersDropped));
     }
 }
