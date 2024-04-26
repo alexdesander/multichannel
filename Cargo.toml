@@ -9,6 +9,9 @@ repository = "https://github.com/alexdesander/multichannel"
 readme = "README.md"
 keywords = ["sync", "channel", "multithreading", "concurrency"]
 categories = ["concurrency"]
+exclude = [
+    "logo.png"
+]
 
 [dependencies]
 crossbeam-channel = "0.5.12"
