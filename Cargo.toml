@@ -1,0 +1,13 @@
+[package]
+name = "multichannel"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alexdesander"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+crossbeam-channel = "0.5.12"
+crossbeam-utils = "0.8.19"
+itertools = "0.12.1"
+rand = { version = "0.8.5", features = ["small_rng"] }
+thiserror = "1.0.59"
