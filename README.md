@@ -10,52 +10,89 @@
 </p>
 
 # multichannel
-A multi producer single consumer bundle of channels with configurable priorities, weights and the ability to freeze specific channels.
+A mpmc priority multi channel with dynamic channel registration and freezing.
 
 ## Installation
 Add to your Cargo.toml file:
 ```toml
 [dependencies]
-multichannel = "0.1.0"
+multichannel = "0.2.0"
 ```
 
 ## Features
- - Blocking on multiple channels
- - Strict channel priorities
- - Weighted channels for selection finetuning
- - Freezing channels
+ - Dynamic channel creation and removal
+ - Priority based message selection
+ - Weighted message selection
+ - Channel freezing
+ - Bounded and unbounded channels
+ - Thread safe
+ - No unsafe code
+ - Multi producer and multi consumer
 
-## Simple demonstration
+ ## Performance
+ The amount of functionality the DynMultiReceiver provides comes at a cost. Due to the freezing feature,
+ every receive() call has a worst case of O(n) complexity, where n is the amount of channels. This is because
+ the DynMultiReceiver has to iterate over all channels to find the highest priority channel with a message THAT IS NOT FROZEN.
+ Otherwise using a heap would be a good idea, but the freezing feature makes this impossible.
+ 
+ So if you have a huge amount of channels and you are not using the freezing feature, you might want to consider using a different
+ implementation. For most use cases, the performance should be good enough.
+ 
+ If you can implement your logic using only basic channels, you should do that. This implementation is meant for cases where
+ you need more advanced features.
+
+## Hello World
 ```rust
-/*
-    Create a multi-channel system with five channels configured as follows:
+  use multichannel::DynMultiReceiver;
 
-    The first channel is high priority, unbounded, not frozen, and has a weight of 1.
-    The second and third channels are unbounded with medium priority.
-    The fourth and fifth channels are unbounded with low priority.
-    Channels are prioritized based on their order.
-    The weight of a channel affects its selection probability when multiple channels
-    of the same priority have pending messages. Frozen channels are not selected by
-    receivers, but you can still send messages to them.
-*/
-use multichannel::MultiChannelBuilder;
+ #[derive(Debug)]
+ enum Msg {
+     Shutdown,
+     IntegerData(i32),
+     FloatingData(f32),
+ }
 
-let (mtx, mut mrx) = MultiChannelBuilder::new()
-    .with_channels(vec![
-        vec![(1, None, false)],
-        vec![(1, None, false), (2, None, false)],
-        vec![(10, None, false), (1, None, false)],
-    ])
-    .build::<String>();
-mtx.send(1, "Medium Priority".to_string()).unwrap();
-mtx.send(4, "Low Priority, Weight = 2".to_string()).unwrap();
-mtx.send(3, "Low Priority, Weight = 1".to_string()).unwrap();
-mtx.send(0, "High Priority".to_string()).unwrap();
-assert_eq!(mrx.recv().unwrap(), "High Priority");
-assert_eq!(mrx.recv().unwrap(), "Medium Priority");
-let mut same_prio_msgs = [mrx.recv().unwrap(), mrx.recv().unwrap()];
-same_prio_msgs.sort();
-assert_eq!(same_prio_msgs, ["Low Priority, Weight = 1", "Low Priority, Weight = 2"])
+ #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+ enum Priority {
+     High,
+     Low,
+ }
+
+ fn main() {
+     let mrx = DynMultiReceiver::<Msg, Priority>::new();
+     // Create an unfrozen channel with high priority, a dummy weight and capacity of 1
+     let shutdown_sender = mrx.new_channel(Priority::High, 1, false, Some(1));
+
+     // Create two channels with low priority
+     // int_sender has a weight of 33 and float_sender has a weight of 66
+     // meaning that float_sender will be twice as likely to be selected
+     // when calling receive() on mrx and no higher priority channel has a msg
+     let int_sender = mrx.new_channel(Priority::Low, 33, false, None);
+     let float_sender = mrx.new_channel(Priority::Low, 66, false, None);
+
+     // Send some messages
+     int_sender.send(Msg::IntegerData(33)).unwrap();
+     int_sender.send(Msg::IntegerData(4031)).unwrap();
+     float_sender.send(Msg::FloatingData(3.14)).unwrap();
+     int_sender.send(Msg::IntegerData(2)).unwrap();
+     float_sender.send(Msg::FloatingData(10.0)).unwrap();
+     float_sender.send(Msg::FloatingData(0.0)).unwrap();
+
+     // Receive some messages
+     for _ in 0..4 {
+         println!("{:?}", mrx.receive());
+     }
+
+     // Send a shutdown message
+     shutdown_sender.send(Msg::Shutdown).unwrap();
+
+     // There are still messages left in the int channel and float channel,
+     // but the shutdown message will be received first, as it has higher priority
+     match mrx.receive() {
+         Msg::Shutdown => println!("Received shutdown message"),
+         _ => unreachable!("Expected a shutdown message"),
+     }
+ }
 ```
 
 ### Contribution
