@@ -1,10 +1,10 @@
 [package]
 name = "multichannel"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Alexdesander"]
 license = "MIT OR Apache-2.0"
-description = "A multi producer single consumer bundle of channels with configurable priorities, weights and the ability to freeze specific channels."
+description = "A mpmc priority multi channel with dynamic channel registration and freezing."
 repository = "https://github.com/alexdesander/multichannel"
 readme = "README.md"
 keywords = ["sync", "channel", "multithreading", "concurrency"]
@@ -14,8 +14,10 @@ exclude = [
 ]
 
 [dependencies]
+ahash = "0.8.11"
 crossbeam-channel = "0.5.12"
 crossbeam-utils = "0.8.19"
 itertools = "0.12.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
+smallvec = { version = "1.13.2", features = ["union"] }
 thiserror = "1.0.59"
