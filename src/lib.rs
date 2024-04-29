@@ -341,7 +341,6 @@ impl<T, P: Priority> DynMultiReceiver<T, P> {
         let state = self.state.read().unwrap();
 
         // Find the highest priority group with a receiver that has a message
-        // TODO: Handle 0 capacity channels
         let mut candidate_weights = SmallVec::<[u32; 8]>::new();
         let mut candidate_indices = SmallVec::<[usize; 8]>::new();
         loop {
